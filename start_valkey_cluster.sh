@@ -7,7 +7,7 @@
 set -euo pipefail
 
 CONTAINER="valkey-cluster"
-IMAGE="valkey/valkey:7.2"
+IMAGE="public.ecr.aws/valkey/valkey:9"
 DATA_DIR="$(pwd)/valkey-data"
 
 # ── wipe old container, keep data (makes restarts idempotent) ────────────────
