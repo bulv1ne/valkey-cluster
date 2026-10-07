@@ -1,4 +1,4 @@
-FROM valkey/valkey:9
+FROM public.ecr.aws/valkey/valkey:9
 
 # Install Python and required system packages
 RUN apt-get update && apt-get install -y \
