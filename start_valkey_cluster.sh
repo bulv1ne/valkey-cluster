@@ -7,7 +7,7 @@
 set -euo pipefail
 
 CONTAINER="valkey-cluster"
-IMAGE="public.ecr.aws/valkey/valkey:9"
+IMAGE="${VALKEY_IMAGE:-public.ecr.aws/valkey/valkey:9}"   # override with VALKEY_IMAGE=...
 DATA_DIR="$(pwd)/valkey-data"
 
 # ── wipe old container, keep data (makes restarts idempotent) ────────────────
@@ -15,8 +15,34 @@ docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 mkdir -p "$DATA_DIR"
 cp valkey.conf "$DATA_DIR/valkey.conf"
 
+# ── pull image with retry (registry may throttle pulls) ─────────────────────
+PULL_MAX_ATTEMPTS="${PULL_MAX_ATTEMPTS:-5}"
+PULL_BACKOFF="${PULL_BACKOFF:-5}"   # seconds, doubles after each failure
+
+pull_image() {
+  local attempt=1 delay="$PULL_BACKOFF"
+  # Skip pulling if the image is already present locally
+  if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    return 0
+  fi
+  until docker pull "$IMAGE"; do
+    if (( attempt >= PULL_MAX_ATTEMPTS )); then
+      echo "❌  Failed to pull $IMAGE after $attempt attempts" >&2
+      return 1
+    fi
+    # Full jitter: sleep a random duration between 1 and the current backoff
+    local wait=$(( (RANDOM % delay) + 1 ))
+    echo "⚠️   Pull failed (attempt $attempt/$PULL_MAX_ATTEMPTS), retrying in ${wait}s…" >&2
+    sleep "$wait"
+    attempt=$((attempt + 1))
+    delay=$((delay * 2))
+  done
+}
+
+pull_image
+
 # ── launch container ────────────────────────────────────────────────────────
-docker run -d --name "$CONTAINER" \
+docker run -d --pull never --name "$CONTAINER" \
   --restart unless-stopped \
   -p 6000-6005:6000-6005 \
   -v "$DATA_DIR":/data \
